@@ -1,5 +1,7 @@
 package com.panel.servers;
 
+import com.panel.rcon.RconCommandRequest;
+import com.panel.rcon.RconService;
 import com.panel.servers.dto.CreateServerRequest;
 import com.panel.servers.dto.ServerDto;
 import com.panel.servers.dto.UpdateConfigRequest;
@@ -12,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -20,6 +23,7 @@ import java.util.UUID;
 public class ServerController {
 
     private final ServerService serverService;
+    private final RconService rconService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('VIEWER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN')")
@@ -73,10 +77,18 @@ public class ServerController {
         return ResponseEntity.ok(serverService.kill(id));
     }
 
+    @PostMapping("/{id}/console/command")
+    @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<Map<String, String>> sendCommand(
+            @PathVariable UUID id,
+            @Valid @RequestBody RconCommandRequest request) {
+        String output = rconService.sendCommand(id, request.getCommand());
+        return ResponseEntity.ok(Map.of("output", output));
+    }
+
     @GetMapping("/{id}/config")
     @PreAuthorize("hasAnyRole('VIEWER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<ServerDto.ServerConfigDto> getConfig(@PathVariable UUID id) {
-        // Ensure server exists
         serverService.getOrThrow(id);
         return ResponseEntity.ok(ServerDto.ServerConfigDto.fromEntity(serverService.getConfig(id)));
     }
