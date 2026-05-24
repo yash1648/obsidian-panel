@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/minecraft_panel
     username: panel
-    password: ${DB_PASSWORD}
+    password: ${DB_PASSWORD:panel_dev}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -21,7 +21,7 @@ spring:
 docker:
   host: ${DOCKER_HOST:unix:///var/run/docker.sock}
   servers:
-    base-path: /opt/panel/servers
+    base-path: ${DOCKER_SERVERS_PATH:/tmp/panel/servers}
 
 panel:
   jwt:
@@ -31,7 +31,7 @@ panel:
   rcon:
     connection-timeout: 5000
   backup:
-    base-path: /opt/panel/backups
+    base-path: ${BACKUP_PATH:/tmp/panel/backups}
 
 server:
   port: 8080
