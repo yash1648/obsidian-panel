@@ -1,0 +1,45 @@
+# =============================================================================
+# Obsidian Panel — Infrastructure Dependencies
+# =============================================================================
+# Start:   docker compose up -d
+# Stop:    docker compose down
+# Reset:   docker compose down -v   (deletes volumes, resets DB + Redis)
+#
+# The panel application itself runs outside this compose file (via Maven + npm).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: panel-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: minecraft_panel
+      POSTGRES_USER: panel
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-panel_dev}
+    volumes:
+      - panel_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U panel -d minecraft_panel"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: panel-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - panel_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  panel_postgres_data:
+  panel_redis_data:

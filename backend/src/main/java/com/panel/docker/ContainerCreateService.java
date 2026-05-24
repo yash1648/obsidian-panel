@@ -2,6 +2,7 @@ package com.panel.docker;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.dockerjava.api.exception.DockerException;
 import com.github.dockerjava.api.model.*;
 import com.panel.servers.Server;
 import lombok.RequiredArgsConstructor;
@@ -29,22 +30,25 @@ public class ContainerCreateService {
 
     public void provision(Server server) {
         try {
-            // 1. Create host directory
+            // 1. Ensure base path exists (/opt/panel/servers/…)
             Path hostPath = Paths.get(serversBasePath, server.getUuid());
             Files.createDirectories(hostPath);
+            log.info("Host directory created: {}", hostPath);
 
             // 2. Generate RCON password
             String rconPassword = UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             int rconPort = server.getPort() + 10000;
 
-            // 3. Ensure image is available
-            String imageTag = server.getVersion().toLowerCase();
-            if (!imageService.imageExists(imageTag)) {
-                imageService.pullImage(imageTag);
+            // 3. Ensure base image is available (pull if missing)
+            // NOTE: itzg/minecraft-server uses Java-version tags (latest, java21, etc.),
+            // NOT Minecraft version tags. The Minecraft version is passed as VERSION env var below.
+            if (!imageService.imageExists()) {
+                log.info("Base image {} not found locally, pulling…", imageService.getFullImageName());
+                imageService.pullImage();
             }
 
-            // 4. Create container
-            CreateContainerResponse container = dockerClient.createContainerCmd(imageService.getBaseImage() + ":" + imageTag)
+            // 4. Create and start the container (default bridge network — no custom network required)
+            CreateContainerResponse container = dockerClient.createContainerCmd(imageService.getFullImageName())
                     .withName("mc-" + server.getUuid())
                     .withEnv(buildEnvVars(server, rconPassword))
                     .withLabels(server.getContainerLabels())
@@ -59,7 +63,6 @@ public class ContainerCreateService {
                             .withCpuPeriod(100_000L)
                             .withCpuQuota((long) (server.getAllocatedCpu().doubleValue() * 100_000))
                             .withRestartPolicy(RestartPolicy.unlessStoppedRestart())
-                            .withNetworkMode("panel-network")
                     )
                     .exec();
 
@@ -80,6 +83,8 @@ public class ContainerCreateService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Image pull interrupted for server " + server.getName(), e);
+        } catch (DockerException e) {
+            throw new RuntimeException("Docker error provisioning server " + server.getName() + ": " + e.getMessage(), e);
         }
     }
 

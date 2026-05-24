@@ -1,7 +1,6 @@
 package com.panel.servers;
 
 import com.panel.console.ConsoleStreamingService;
-import com.panel.docker.ContainerCreateService;
 import com.panel.docker.ContainerLifecycleService;
 import com.panel.servers.config.ServerConfig;
 import com.panel.servers.config.ServerConfigRepository;
@@ -17,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 @Service
 @RequiredArgsConstructor
@@ -26,7 +24,7 @@ public class ServerService {
 
     private final ServerRepository serverRepository;
     private final ServerConfigRepository configRepository;
-    private final ContainerCreateService containerCreateService;
+    private final ProvisioningService provisioningService;
     private final ContainerLifecycleService containerLifecycleService;
     private final ConsoleStreamingService consoleStreamingService;
 
@@ -52,7 +50,6 @@ public class ServerService {
         return dto;
     }
 
-    @Transactional
     public ServerDto create(CreateServerRequest request) {
         if (serverRepository.findAllPorts().contains(request.getPort())) {
             throw new IllegalArgumentException("Port " + request.getPort() + " is already in use.");
@@ -83,29 +80,9 @@ public class ServerService {
         configRepository.save(config);
 
         // Async provisioning (Docker container creation)
-        UUID serverId = server.getId();
-        CompletableFuture.runAsync(() -> {
-            try {
-                Server provisioningServer = getOrThrow(serverId);
-                containerCreateService.provision(provisioningServer);
-                serverRepository.save(provisioningServer);
-                provisioningServer.setStatus(ServerStatus.RUNNING);
-                serverRepository.save(provisioningServer);
-
-                consoleStreamingService.sendStatusUpdate(serverId, "RUNNING");
-                log.info("Server {} provisioned and running", serverId);
-            } catch (Exception e) {
-                log.error("Failed to provision server {}: {}", serverId, e.getMessage());
-                try {
-                    Server failedServer = getOrThrow(serverId);
-                    failedServer.setStatus(ServerStatus.ERROR);
-                    serverRepository.save(failedServer);
-                    consoleStreamingService.sendStatusUpdate(serverId, "ERROR");
-                } catch (Exception ex) {
-                    log.error("Failed to update server {} to ERROR state", serverId, ex);
-                }
-            }
-        });
+        // NOTE: no @Transactional on this method — saves above commit immediately
+        // so the @Async provisioning task can always find the server.
+        provisioningService.provision(server.getId());
 
         return ServerDto.fromEntity(server);
     }
