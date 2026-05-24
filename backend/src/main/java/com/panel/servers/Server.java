@@ -5,6 +5,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -75,5 +76,12 @@ public class Server {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public Map<String, String> getContainerLabels() {
+        return Map.of(
+                "panel.managed", "true",
+                "panel.server-id", id.toString()
+        );
     }
 }
